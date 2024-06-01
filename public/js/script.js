@@ -1,6 +1,6 @@
 const roomId = document.querySelector("#room-id").textContent;
 
-const ws = new WebSocket("ws://localhost:8080");
+const ws = new WebSocket("wss://tic-tac-toe-live.onrender.com");
 
 ws.onopen = () => {
   let message = { type: "Join", roomId };

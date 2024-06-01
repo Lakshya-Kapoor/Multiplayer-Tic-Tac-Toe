@@ -1,3 +1,7 @@
+if (process.env.NODE_ENV != "production") {
+  require("dotenv").config();
+}
+
 const express = require("express");
 const app = express();
 const WebSocket = require("ws");
@@ -6,11 +10,25 @@ const session = require("express-session");
 const path = require("path");
 const flash = require("connect-flash");
 const { v4: uuidv4 } = require("uuid");
+const mongoose = require("mongoose");
+const MongoStore = require("connect-mongo");
 const { isWinner, clickCount } = require("./gameLogic");
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const PORT = 8080;
+
+async function main() {
+  await mongoose.connect(process.env.MONGO_URL);
+}
+
+main()
+  .then(() => {
+    console.log("connected to DB");
+  })
+  .catch((err) => {
+    console.log(err);
+  });
 
 // Room setup
 const rooms = {};
@@ -22,10 +40,15 @@ app.use(express.static(path.join(__dirname, "/public")));
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "mySecret",
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false },
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URL,
+      crypto: { secret: process.env.SESSION_SECRET },
+      touchAfter: 24 * 3600,
+    }),
   })
 );
 app.use(flash());
@@ -155,7 +178,9 @@ wss.on("connection", (ws) => {
       case "New": {
         const { roomId } = message;
 
-        if (!(isWinner(rooms[roomId].grid) || clickCount(rooms[roomId].grid) == 9)) {
+        if (
+          !(isWinner(rooms[roomId].grid) || clickCount(rooms[roomId].grid) == 9)
+        ) {
           let reply = { type: "Error", errorMsg: "First finish this game" };
           reply = JSON.stringify(reply);
           ws.send(reply);
@@ -178,7 +203,9 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     for (let roomId in rooms) {
-      rooms[roomId].players = rooms[roomId].players.filter((playerId) => playerId != clientId);
+      rooms[roomId].players = rooms[roomId].players.filter(
+        (playerId) => playerId != clientId
+      );
       rooms[roomId].grid.forEach((value, position) => {
         if (value) {
           let reply = { type: "Update", position, value: "" };
