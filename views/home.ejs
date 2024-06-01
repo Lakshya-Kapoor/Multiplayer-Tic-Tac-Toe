@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tic Tac Toe</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <script defer src="/js/script2.js"></script>
+  </head>
+  <body>
+    <% if (errorMsg) {%>
+    <div class="error">
+      <p><%= errorMsg %></p>
+    </div>
+    <% } %>
+    <div class="container">
+      <form action="/home" method="post">
+        <input type="text" placeholder="room-id" name="roomId" />
+        <button class="btn">Create</button>
+      </form>
+      <button class="btn join-btn">Join</button>
+    </div>
+  </body>
+</html>
