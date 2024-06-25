@@ -1,6 +1,7 @@
 const roomId = document.querySelector("#room-id").textContent;
 
-const ws = new WebSocket("wss://tic-tac-toe-live.onrender.com");
+// const ws = new WebSocket("wss://tic-tac-toe-live.onrender.com");
+const ws = new WebSocket("ws://localhost:3000");
 
 ws.onopen = () => {
   let message = { type: "Join", roomId };
@@ -24,6 +25,11 @@ ws.onmessage = (event) => {
     }
     case "Result": {
       alert(message.resultMsg);
+      break;
+    }
+    case "X/O": {
+      console.log(message.character);
+      break;
     }
   }
 };
