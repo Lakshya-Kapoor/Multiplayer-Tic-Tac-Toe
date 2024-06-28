@@ -2,7 +2,13 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
-const { isWinner, clickCount } = require("./utils/gameFunctions");
+const {
+  isWinner,
+  clickCount,
+  resetBoard,
+  turnX,
+  turnO,
+} = require("./utils/gameFunctions");
 const { sendOne, sendAll } = require("./utils/sendReponse");
 
 const PORT = 3000;
@@ -10,7 +16,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Rooms in which players play
 const rooms = {};
+// Stores the websocket instance with the clientId
 const clients = {};
 
 // All the exisiting rooms
@@ -29,7 +37,7 @@ app.get("/rooms/:roomId", (req, res) => {
 // Game logic
 wss.on("connection", (ws) => {
   let clientId = uuidv4();
-  clients[clientId] = ws;
+  clients[clientId] = { socketConnection: ws, roomId: null };
 
   ws.on("message", (message) => {
     // Join: {type: string, roomId: string}
@@ -39,50 +47,54 @@ wss.on("connection", (ws) => {
     message = JSON.parse(message);
     const { type, roomId, position } = message;
     const room = rooms[roomId];
+    const board = room.grid;
 
     switch (type) {
       case "Join": {
+        clients[clientId].roomId = roomId;
         room.players.push(clientId);
         break;
       }
 
       case "Play": {
+        // When the room is not full
         if (room.players.length < 2) {
           let res = { type: "Error", errorMsg: "Not enough players" };
           sendOne(res, ws);
-        } else {
-          if (isWinner(room.grid)) {
-            let winner = clickCount(room.grid) % 2 == 1 ? "X" : "O";
+        }
+        // When room is full
+        else {
+          // Checks if the game is already won
+          if (isWinner(board)) {
+            let winner = clickCount(board) % 2 == 1 ? "X" : "O";
             let res = {
               type: "Result",
               resultMsg: `${winner} is the winner`,
             };
             sendOne(res, ws);
             break;
-          } else if (
-            clickCount(room.grid) % 2 == 0 &&
-            clientId == room.players[0] &&
-            room.grid[position] == null
-          ) {
-            room.grid[position] = "X";
+          }
+          // Updates the board when X is played
+          else if (turnX(board, position, clientId, room)) {
+            board[position] = "X";
             let res = { type: "Update", position, value: "X" };
             sendAll(res, room.players, clients);
-          } else if (
-            clickCount(room.grid) % 2 == 1 &&
-            clientId == room.players[1] &&
-            room.grid[position] == null
-          ) {
-            room.grid[position] = "O";
+          }
+          // Updates the board when O is played
+          else if (turnO(board, position, clientId, room)) {
+            board[position] = "O";
             let res = { type: "Update", position, value: "O" };
             sendAll(res, room.players, clients);
-          } else {
+          }
+          // Alerts if someone plays out of turn
+          else {
             let res = { type: "Error", errorMsg: "Not your turn" };
             sendOne(res, ws);
             break;
           }
-
-          if (isWinner(room.grid)) {
-            let winner = clickCount(room.grid) % 2 == 1 ? "X" : "O";
+          // Checks if there is a winner
+          if (isWinner(board)) {
+            let winner = clickCount(board) % 2 == 1 ? "X" : "O";
             let res = {
               type: "Result",
               resultMsg: `${winner} is the winner`,
@@ -91,8 +103,8 @@ wss.on("connection", (ws) => {
               sendAll(res, room.players, clients);
             }, 100);
           }
-
-          if (clickCount(room.grid) == 9) {
+          // Checks if there is a draw
+          if (clickCount(board) == 9) {
             let res = { type: "Result", resultMsg: `It's a draw` };
             setTimeout(() => {
               sendAll(res, room.players, clients);
@@ -103,55 +115,39 @@ wss.on("connection", (ws) => {
       }
 
       case "New": {
-        console.log("New message:", message);
-
-        if (!(isWinner(room.grid) || clickCount(room.grid) == 9)) {
+        // If game is not yet over
+        if (!(isWinner(board) || clickCount(board) == 9)) {
           let res = { type: "Error", errorMsg: "First finish this game" };
           sendOne(res, ws);
-        } else {
+        }
+        // Game is reset
+        else {
           room.players = room.players.reverse();
-          room.grid.forEach((value, position) => {
-            if (value) {
-              let res = { type: "Update", position, value: "" };
-              sendAll(res, room.players, clients);
-
-              room.grid[position] = null;
-            }
-          });
+          resetBoard(board, room.players, clients);
         }
       }
     }
   });
 
   ws.on("close", () => {
-    for (let roomId in rooms) {
-      rooms[roomId].players = rooms[roomId].players.filter((player) => player != clientId);
-      rooms[roomId].grid.forEach((value, position) => {
-        if (value) {
-          let res = { type: "Update", position, value: "" };
-          res = JSON.stringify(res);
-          rooms[roomId].players.forEach((player) => {
-            clients[player].send(res);
-          });
-          rooms[roomId].grid[position] = null;
-        }
-      });
-      rooms[roomId].players.forEach((player) => {
-        let res = { type: "Error", errorMsg: "Opponent left the game" };
-        res = JSON.stringify(res);
-        setTimeout(() => {
-          clients[player].send(res);
-        }, 100);
-      });
+    let { roomId } = clients[clientId];
 
-      // Empty room is deleted in five minutes
-      /* This has a semantic error that needs fixing */
-      setTimeout(() => {
-        if (rooms[roomId].players.length == 0) {
-          delete rooms[roomId];
-        }
-      }, 1000 * 60 * 5);
-    }
+    rooms[roomId].players = rooms[roomId].players.filter(
+      (player) => player != clientId
+    );
+
+    resetBoard(rooms[roomId].grid, rooms[roomId].players, clients);
+
+    let res = { type: "Error", errorMsg: "Opponent left the game" };
+    sendAll(res, rooms[roomId].players, clients);
+
+    // Empty room is deleted in five minutes
+    /* This has a semantic error that needs fixing */
+    setTimeout(() => {
+      if (rooms[roomId].players.length == 0) {
+        delete rooms[roomId];
+      }
+    }, 1000 * 60 * 5);
   });
 });
 

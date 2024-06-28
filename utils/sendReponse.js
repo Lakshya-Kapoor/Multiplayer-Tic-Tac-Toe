@@ -7,6 +7,6 @@ module.exports.sendAll = (res, players, clients) => {
   res = JSON.stringify(res);
 
   players.forEach((player) => {
-    clients[player].send(res);
+    clients[player].socketConnection.send(res);
   });
 };
