@@ -155,7 +155,6 @@ wss.on("connection", (ws) => {
       rooms[roomId].timerId = setTimeout(() => {
         delete rooms[roomId];
       }, 1000 * 60 * 5);
-      console.log(rooms);
     }
   });
 });
