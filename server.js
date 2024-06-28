@@ -56,11 +56,11 @@ app.get("/", (req, res) => {
   res.render("home.ejs");
 });
 
-// Joining room id
+// Joining room
 app.get("/room/:id", async (req, res) => {
   const roomId = req.params.id;
   const data = await fetch("http://localhost:3000/rooms");
-  rooms = await data.json();
+  const rooms = await data.json();
 
   if (!rooms[roomId]) {
     req.flash("error", `room "${roomId}" doesn't exist`);
@@ -73,7 +73,7 @@ app.get("/room/:id", async (req, res) => {
   }
 });
 
-// Creating room id
+// Creating room
 app.post("/home", async (req, res) => {
   const { roomId } = req.body;
   const data = await fetch("http://localhost:3000/rooms");

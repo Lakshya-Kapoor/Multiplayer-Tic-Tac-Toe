@@ -23,14 +23,19 @@ const clients = {};
 
 // All the exisiting rooms
 app.get("/rooms", (req, res) => {
-  const response = JSON.stringify(rooms);
+  const modifiedRooms = {};
+  for (let roomId in rooms) {
+    let { timerId, ...rest } = rooms[roomId];
+    modifiedRooms[roomId] = rest;
+  }
+  const response = JSON.stringify(modifiedRooms);
   res.send(response);
 });
 
 // Creating a new room
 app.get("/rooms/:roomId", (req, res) => {
   const { roomId } = req.params;
-  rooms[roomId] = { players: [], grid: new Array(9).fill(null) };
+  rooms[roomId] = { players: [], grid: new Array(9).fill(null), timerId: null };
   res.send("ok");
 });
 
@@ -53,6 +58,10 @@ wss.on("connection", (ws) => {
       case "Join": {
         clients[clientId].roomId = roomId;
         room.players.push(clientId);
+        if (room.timerId) {
+          clearTimeout(room.timerId);
+          room.timerId = null;
+        }
         break;
       }
 
@@ -142,12 +151,12 @@ wss.on("connection", (ws) => {
     sendAll(res, rooms[roomId].players, clients);
 
     // Empty room is deleted in five minutes
-    /* This has a semantic error that needs fixing */
-    setTimeout(() => {
-      if (rooms[roomId].players.length == 0) {
+    if (rooms[roomId].players.length == 0) {
+      rooms[roomId].timerId = setTimeout(() => {
         delete rooms[roomId];
-      }
-    }, 1000 * 60 * 5);
+      }, 1000 * 60 * 5);
+      console.log(rooms);
+    }
   });
 });
 
